@@ -44,8 +44,14 @@ WEEKDAYS_SHORT = ["пн", "вт", "ср", "чт", "пт", "сб", "нд"]
 # ── розбір .ics ──────────────────────────────────────────────
 
 def unfold(text):
-    """У .ics довгі рядки переносяться з пробілом на початку продовження."""
-    return re.sub(r"\r?\n[ \t]", "", text)
+    """
+    Нормалізує переноси і склеює згорнуті рядки.
+
+    Exchange віддає .ics із CRLF, а довгі значення розбиває на кілька
+    рядків, де продовження починається з пробілу або табуляції.
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    return re.sub(r"\n[ \t]", "", text)
 
 
 def unescape(value):
@@ -91,6 +97,8 @@ def load_events(source):
                 ev["location"] = unescape(value)
             elif name == "DTSTART":
                 ev["start"], ev["all_day"] = parse_dt(value, params)
+            elif name == "DTEND":
+                ev["end"], _ = parse_dt(value, params)
             elif name == "RRULE":
                 ev["rrule"] = value
             elif name == "EXDATE":
@@ -134,8 +142,10 @@ def sessions_in_window(events, window_start, window_end):
         if not kind:          # оголошення без позначки формату — не заняття
             continue
         link = ev["location"].strip()
+        span = (ev["end"] - ev["start"]) if ev.get("end") else None
         for when in occurrences(ev, window_start, window_end):
             out.append({"when": when, "title": name, "kind": kind,
+                        "until": when + span if span else None,
                         "link": link if link.startswith("http") else ""})
     return out
 

@@ -1,0 +1,47 @@
+name: Надіслати тижневий лист
+
+# Другий крок: увечері тієї ж суботи надсилає чернетку, створену вранці.
+# Якщо ти її видалив або переклав з теки «Чернетки» — нічого не піде.
+# Це і є вікно на вето: щоб скасувати розсилку, достатньо нічого не робити.
+
+on:
+  schedule:
+    # 18:00 за Києвом; UTC-варіанти для літнього і зимового часу.
+    - cron: "0 15,16 * * 6"
+  workflow_dispatch:
+
+concurrency:
+  group: tyzhnevyi-lyst
+  cancel-in-progress: false
+
+jobs:
+  vidpravka:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Чи справді зараз 18-та за Києвом
+        id: hodyna
+        run: |
+          година=$(TZ=Europe/Kyiv date +%H)
+          echo "Київ: $(TZ=Europe/Kyiv date '+%Y-%m-%d %H:%M')"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$година" != "18" ]; then
+            echo "propustyty=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.hodyna.outputs.propustyty != 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Залежності
+        if: steps.hodyna.outputs.propustyty != 'true'
+        run: pip install python-dateutil
+
+      - name: Надіслати
+        if: steps.hodyna.outputs.propustyty != 'true'
+        env:
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_REFRESH_TOKEN: ${{ secrets.GRAPH_REFRESH_TOKEN }}
+          TRYMESTR_POCHATOK: ${{ vars.TRYMESTR_POCHATOK }}
+        run: python3 zbirka.py --nadislaty

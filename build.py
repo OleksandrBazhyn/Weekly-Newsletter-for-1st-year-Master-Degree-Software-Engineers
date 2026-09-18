@@ -36,6 +36,9 @@ LINE = "#DFE5EE"         # тонкі лінії
 PAGE = "#E4E9F1"         # тло сторінки
 
 SANS = "'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif"
+# Відкривати в новій вкладці: діє у вебпошті (OWA, Gmail); десктопні
+# клієнти й так віддають посилання системному браузеру.
+NEW_TAB = 'target="_blank" rel="noopener noreferrer"' 
 SERIF = "Georgia, 'Times New Roman', serif"
 
 # ── назви секцій: міняй тут, якщо хочеться своїх формулювань ──
@@ -108,7 +111,10 @@ def paragraphs(text):
 
 def week_summary(cfg, end, today):
     """Рядок-резюме під датою: скільки занять і коли найближчий термін."""
-    lessons = sum(len(d.get("session", [])) for d in cfg.get("day", []))
+    # Рядків у розкладі менше, ніж пар: заняття одного курсу в один день
+    # зливаються. Для читача важлива саме кількість пар.
+    lessons = cfg.get("week", {}).get("lessons") or sum(
+        len(d.get("session", [])) for d in cfg.get("day", []))
     bits = []
     if lessons:
         bits.append(f"{lessons} {plural(lessons, 'заняття', 'заняття', 'занять')}")
@@ -179,7 +185,7 @@ def schedule(days):
         for j, s in enumerate(item.get("session", [])):
             title = e(s.get("title", ""))
             if s.get("link"):
-                title = (f'<a href="{e(s["link"])}" style="color:{INK};'
+                title = (f'<a href="{e(s["link"])}" {NEW_TAB} style="color:{INK};'
                          f'text-decoration:none;border-bottom:2px solid {LINE};">{title}</a>')
             meta = e(s.get("teacher", ""))
             note = s.get("note")
@@ -258,12 +264,16 @@ def deadlines(items, today):
         target = as_date(d["date"])
         when, color = countdown(target, today)
         top = "" if i == 0 else "border-top:1px solid #F1DFDB;"
-        where = (f'<span style="color:{MUTED};font-weight:400;">, {e(d["where"])}</span>'
-                 if d.get("where") else "")
+        title = e(d.get("title", ""))
+        if d.get("link"):
+            title = (f'<a href="{e(d["link"])}" {NEW_TAB} style="color:{INK};'
+                     f'text-decoration:none;border-bottom:2px solid #EBCFC9;">{title}</a>')
+        course = (f'<span style="color:{MUTED};font-weight:400;">{e(d["course"])} — </span>'
+                  if d.get("course") else "")
         rows.append(f"""
 <tr><td style="{top}padding:14px 0;">
-  <div style="font:600 16px/1.5 {SANS};color:{INK};">{e(d.get('title', ''))}</div>
-  <div style="font:600 14px/1.5 {SANS};color:{color};padding-top:4px;">{e(when)}{where}</div>
+  <div style="font:600 16px/1.5 {SANS};">{title}</div>
+  <div style="font:600 14px/1.5 {SANS};color:{color};padding-top:4px;">{course}{e(when)}</div>
 </td></tr>""")
     return f"""
 <tr><td class="px" style="padding:20px 38px 0 38px;">
@@ -285,7 +295,7 @@ def news(items):
         top = "" if i == 0 else "border-top:1px solid #F0E3C8;"
         title = e(n.get("title", ""))
         if n.get("link"):
-            title = (f'<a href="{e(n["link"])}" style="color:{BRASS_INK};'
+            title = (f'<a href="{e(n["link"])}" {NEW_TAB} style="color:{BRASS_INK};'
                      f'text-decoration:none;border-bottom:2px solid #E8D3A6;">{title}</a>')
         rows.append(f"""
 <tr><td style="{top}padding:15px 0;">
@@ -318,10 +328,10 @@ def footer_block(cfg):
         f'<td style="padding:0 10px 10px 0;">'
         f'<table role="presentation" cellpadding="0" cellspacing="0" border="0"'
         f' style="border-collapse:collapse;">'
-        f'<tr><td bgcolor="#FFFFFF" style="background:#FFFFFF;border-radius:20px;'
-        f'padding:9px 18px;">'
-        f'<a href="{e(l["url"])}" style="font:600 14px/1.4 {SANS};color:{NAVY};'
-        f'text-decoration:none;">{e(l["label"])}</a></td></tr></table></td>'
+        f'<tr><td bgcolor="#FFFFFF" style="background:#FFFFFF;border-radius:20px;">'
+        f'<a href="{e(l["url"])}" {NEW_TAB} style="display:block;padding:11px 20px;'
+        f'font:600 14px/1.4 {SANS};color:{NAVY};text-decoration:none;">'
+        f'{e(l["label"])}</a></td></tr></table></td>'
         for l in cfg.get("link", [])
     )
     links_row = (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0">'
@@ -420,7 +430,9 @@ def plain_text(cfg):
         for d in sorted(cfg["deadline"], key=lambda x: as_date(x["date"])):
             t = as_date(d["date"])
             out.append(f"  {t.day} {MONTHS[t.month - 1]} — {d.get('title', '')}"
-                       f"{' (' + d['where'] + ')' if d.get('where') else ''}")
+                       f"{' (' + d['course'] + ')' if d.get('course') else ''}")
+            if d.get("link"):
+                out.append(f"    {d['link']}")
         out.append("")
     if cfg.get("course"):
         out.append(TITLE_COURSES.upper())

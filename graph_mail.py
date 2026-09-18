@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 
 TENANT = os.environ.get("GRAPH_TENANT", "b8cbfe43-c90c-4bea-84ae-be5d6d8a5f52")
-SCOPES = "offline_access Mail.ReadWrite"
+SCOPES = "offline_access Mail.ReadWrite Mail.Send"
 AUTH = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0"
 GRAPH = "https://graph.microsoft.com/v1.0"
 
@@ -98,6 +98,32 @@ def create_draft(subject, html, text, to):
     except urllib.error.HTTPError as err:
         raise RuntimeError(
             f"Graph відмовив: {err.code} {err.read().decode(errors='replace')}") from None
+
+
+def find_draft(subject):
+    """Шукає чернетку з такою темою. Немає — значить її видалили."""
+    query = urllib.parse.urlencode({
+        "$filter": "subject eq '{}'".format(subject.replace("'", "''")),
+        "$select": "id,subject"})
+    req = urllib.request.Request(
+        f"{GRAPH}/me/mailFolders/drafts/messages?{query}",
+        headers={"Authorization": f"Bearer {access_token()}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        items = json.load(r).get("value", [])
+    return items[0]["id"] if items else None
+
+
+def send_draft(message_id):
+    req = urllib.request.Request(
+        f"{GRAPH}/me/messages/{message_id}/send", data=b"", method="POST",
+        headers={"Authorization": f"Bearer {access_token()}",
+                 "Content-Length": "0"})
+    try:
+        urllib.request.urlopen(req, timeout=30)
+    except urllib.error.HTTPError as err:
+        raise RuntimeError(
+            f"Не вдалося надіслати: {err.code} "
+            f"{err.read().decode(errors='replace')}") from None
 
 
 if __name__ == "__main__":
