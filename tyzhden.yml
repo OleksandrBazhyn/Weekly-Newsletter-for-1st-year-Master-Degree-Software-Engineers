@@ -1,0 +1,84 @@
+name: Тижнева розсилка
+
+on:
+  schedule:
+    # Cron в Actions працює лише в UTC. Субота 9:00 за Києвом — це 06:00 UTC
+    # влітку і 07:00 узимку, тож запускаємось двічі, а зайвий запуск
+    # відсікається перевіркою київської години нижче.
+    - cron: "0 6,7 * * 6"
+  workflow_dispatch:
+    inputs:
+      tyzhden:
+        description: "Понеділок тижня (РРРР-ММ-ДД). Порожньо — наступний."
+        required: false
+      suho:
+        description: "Сухий запуск: не створювати чернетку"
+        type: boolean
+        default: false
+
+concurrency:
+  group: tyzhnevyi-lyst
+  cancel-in-progress: false
+
+jobs:
+  chernetka:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Чи справді зараз 9-та за Києвом
+        id: hodyna
+        run: |
+          година=$(TZ=Europe/Kyiv date +%H)
+          echo "Київ: $(TZ=Europe/Kyiv date '+%Y-%m-%d %H:%M')"
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$година" != "09" ]; then
+            echo "propustyty=true" >> "$GITHUB_OUTPUT"
+            echo "Не та година — пропускаю."
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.hodyna.outputs.propustyty != 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Залежності
+        if: steps.hodyna.outputs.propustyty != 'true'
+        run: pip install python-dateutil
+
+      - name: Зібрати лист
+        id: zbirka
+        if: steps.hodyna.outputs.propustyty != 'true'
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          GRAPH_CLIENT_ID: ${{ secrets.GRAPH_CLIENT_ID }}
+          GRAPH_REFRESH_TOKEN: ${{ secrets.GRAPH_REFRESH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ROZSYLKA: ${{ vars.ROZSYLKA }}
+          PIDPYS: ${{ vars.PIDPYS }}
+        run: |
+          python3 zbirka.py \
+            ${{ inputs.tyzhden && format('--tyzhden {0}', inputs.tyzhden) || '' }} \
+            ${{ inputs.suho && '--suho' || '' }}
+
+      - name: Оновити refresh-токен
+        if: steps.zbirka.outputs.refresh_token != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "GH_PAT не заданий — токен не збережено. Раз на ~90 днів"
+            echo "доведеться перезапустити graph_mail.py --avtoryzatsiya."
+            exit 0
+          fi
+          gh secret set GRAPH_REFRESH_TOKEN \
+            --body "${{ steps.zbirka.outputs.refresh_token }}" \
+            --repo "${{ github.repository }}"
+
+      - name: Зберегти лист як артефакт
+        if: always() && steps.hodyna.outputs.propustyty != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyst
+          path: out/
+          if-no-files-found: ignore
+          retention-days: 30
