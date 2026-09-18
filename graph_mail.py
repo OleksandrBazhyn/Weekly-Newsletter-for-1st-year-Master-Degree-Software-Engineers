@@ -20,7 +20,11 @@ import urllib.parse
 import urllib.request
 
 TENANT = os.environ.get("GRAPH_TENANT", "b8cbfe43-c90c-4bea-84ae-be5d6d8a5f52")
-SCOPES = "offline_access Mail.ReadWrite Mail.Send"
+# Mail.Send у деяких тенантах потребує згоди адміністратора. Типово
+# просимо лише те, що точно дадуть: створення чернетки. Коли згоду
+# отримаєш — додай Mail.Send через GRAPH_SCOPES і перезапусти
+# --avtoryzatsiya, бо токен видається під конкретний набір дозволів.
+SCOPES = os.environ.get("GRAPH_SCOPES", "offline_access Mail.ReadWrite")
 AUTH = f"https://login.microsoftonline.com/{TENANT}/oauth2/v2.0"
 GRAPH = "https://graph.microsoft.com/v1.0"
 
@@ -114,6 +118,10 @@ def find_draft(subject):
 
 
 def send_draft(message_id):
+    if "Mail.Send" not in SCOPES:
+        raise RuntimeError(
+            "Надсилання вимкнене: у GRAPH_SCOPES немає Mail.Send. "
+            "Чернетка створена, відправ її з Outlook вручну.")
     req = urllib.request.Request(
         f"{GRAPH}/me/messages/{message_id}/send", data=b"", method="POST",
         headers={"Authorization": f"Bearer {access_token()}",

@@ -17,6 +17,7 @@ import sys
 import unicodedata
 import urllib.request
 from datetime import date, datetime, timedelta
+from email.message import EmailMessage
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -388,14 +389,25 @@ def main():
 
     out = Path("out"); out.mkdir(exist_ok=True)
     (out / f"lyst-{monday.isoformat()}.html").write_text(html, encoding="utf-8")
+
+    # .eml перетягується в теку «Чернетки» в Outlook — це запасний шлях,
+    # коли доступ до Graph закритий політикою тенанту.
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    to = [a.strip() for a in os.environ.get("ROZSYLKA", "").split(",") if a.strip()]
+    if to:
+        msg["To"] = ", ".join(to)
+    msg.set_content(text)
+    msg.add_alternative(html, subtype="html")
+    (out / f"lyst-{monday.isoformat()}.eml").write_bytes(msg.as_bytes())
     print(f"Тема: {subject}")
     print(f"Занять: {sum(len(d['session']) for d in cfg['day'])}, "
           f"термінів: {len(cfg['deadline'])}, "
           f"предметів у листі: {len(cfg['course'])}, "
           f"можливостей: {len(cfg['news'])}")
 
-    if args.suho:
-        print("Сухий запуск — чернетку не створюю.")
+    if args.suho or os.environ.get("BEZ_GRAPH"):
+        print("Файли готові. Чернетку через Graph не створюю.")
         return
 
     to = [a.strip() for a in os.environ.get("ROZSYLKA", "").split(",") if a.strip()]

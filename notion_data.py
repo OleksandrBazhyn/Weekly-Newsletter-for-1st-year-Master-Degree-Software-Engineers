@@ -3,6 +3,7 @@
 
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 from datetime import date
@@ -130,9 +131,17 @@ def open_tasks():
 def opportunities(week_start, week_end):
     out = []
     for page in query_all(DB["mozhlyvosti"]):
+        title = value(page, "Назва")
         since, until = value(page, "Показувати з"), value(page, "Показувати до")
         if not since or not until:
-            continue                      # без дат не показуємо ніколи
+            print(f"Можливість «{title}» без дат показу — пропускаю",
+                  file=sys.stderr)
+            continue
+        if until < since:
+            print(f"Можливість «{title}»: «показувати до» ({until}) раніше за "
+                  f"«показувати з» ({since}) — такий запис не покажеться ніколи",
+                  file=sys.stderr)
+            continue
         if since > week_end or until < week_start:
             continue
         out.append({

@@ -54,6 +54,7 @@ jobs:
           GRAPH_REFRESH_TOKEN: ${{ secrets.GRAPH_REFRESH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ROZSYLKA: ${{ vars.ROZSYLKA }}
+          BEZ_GRAPH: ${{ vars.BEZ_GRAPH }}
           PIDPYS: ${{ vars.PIDPYS }}
         run: |
           python3 zbirka.py \
@@ -81,4 +82,4 @@ jobs:
           name: lyst
           path: out/
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 90
